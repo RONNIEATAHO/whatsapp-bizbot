@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">bizbot</string>
+    <string name="accessibility_description">Used to automatically paste and send your replies in WhatsApp.</string>
+</resources>

@@ -1,0 +1,117 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:id="@+id/layoutHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginBottom="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Order from"
+            android:textSize="16sp"
+            android:textColor="#888888"/>
+
+        <TextView
+            android:id="@+id/tvDetailCustomer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Customer Name"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/black"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:id="@+id/tvDetailPhone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Phone Number"
+            android:textSize="16sp"
+            android:textColor="#555555"
+            android:layout_marginTop="2dp"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvDetailMessageLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Order Details:"
+        android:layout_below="@id/layoutHeader"
+        android:textStyle="bold"
+        android:textSize="18sp"
+        android:textColor="#555555" />
+
+    <TextView
+        android:id="@+id/tvDetailMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Message content..."
+        android:textSize="20sp"
+        android:layout_below="@id/tvDetailMessageLabel"
+        android:layout_marginTop="8dp"
+        android:padding="16dp"
+        android:background="#15000000"
+        android:textColor="@android:color/black"/>
+
+    <EditText
+        android:id="@+id/etReply"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Type your reply here..."
+        android:layout_below="@id/tvDetailMessage"
+        android:layout_marginTop="32dp"
+        android:minHeight="56dp"
+        android:textSize="18sp"
+        android:padding="12dp"
+        android:background="@android:drawable/edit_text"/>
+
+    <LinearLayout
+        android:id="@+id/layoutAttachment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_below="@id/etReply"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btnAttach"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Attach File"
+            android:textSize="16sp"
+            android:textColor="@android:color/holo_blue_dark" />
+
+        <TextView
+            android:id="@+id/tvAttachmentName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="No file attached"
+            android:textSize="14sp"
+            android:paddingStart="12dp"
+            android:ellipsize="end"
+            android:singleLine="true"/>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnReply"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="Reply on WhatsApp"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_below="@id/layoutAttachment"
+        android:layout_marginTop="24dp"
+        android:backgroundTint="@android:color/holo_green_dark"/>
+
+</RelativeLayout>
