@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Order Location</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 100vh; width: 100%; margin: 0; padding: 0; background: #eee; }
+        body { margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    var map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    var userMarker, customerMarker;
+
+    function updateMap(userLat, userLng, custLat, custLng) {
+        console.log("Updating map: ", userLat, userLng, custLat, custLng);
+
+        var markers = [];
+
+        if (custLat !== null && custLng !== null) {
+            var custPos = [custLat, custLng];
+            if (!customerMarker) {
+                customerMarker = L.marker(custPos, {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map).bindPopup("Customer Location").openPopup();
+            } else {
+                customerMarker.setLatLng(custPos);
+            }
+            markers.push(customerMarker);
+        }
+
+        if (userLat !== null && userLng !== null) {
+            var userPos = [userLat, userLng];
+            if (!userMarker) {
+                userMarker = L.marker(userPos, {title: "You"}).addTo(map).bindPopup("Your Location");
+            } else {
+                userMarker.setLatLng(userPos);
+            }
+            markers.push(userMarker);
+        }
+
+        if (markers.length > 0) {
+            var group = new L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.2));
+        }
+    }
+</script>
+</body>
+</html>

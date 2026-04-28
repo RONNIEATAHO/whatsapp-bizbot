@@ -31,10 +31,12 @@ public class OrderAdapter extends RecyclerView.Adapter<OrderAdapter.OrderViewHol
 
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(v.getContext(), OrderDetailsActivity.class);
+            intent.putExtra("id", order.id); // Pass ID to mark as read
             intent.putExtra("customer", order.customerName);
             intent.putExtra("message", order.message);
             intent.putExtra("notificationKey", order.notificationKey);
             intent.putExtra("phoneNumber", order.phoneNumber);
+            intent.putExtra("locationData", order.locationData); // Pass location data
             v.getContext().startActivity(intent);
         });
     }

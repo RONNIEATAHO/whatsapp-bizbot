@@ -35,6 +35,7 @@ import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.tabs.TabLayout;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -43,6 +44,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends BaseActivity implements NetworkReceiver.NetworkStateListener, SensorEventListener {
 
@@ -52,11 +55,13 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
     private LinearLayout layoutLanding, layoutOrders;
     private TextView tvNoOrders;
     private NetworkReceiver networkReceiver;
+    private RecyclerView recyclerView;
     
     private SensorManager sensorManager;
     private Sensor accelerometer;
     private Button btnExport;
     private TextView tvTitle;
+    private TabLayout tabLayout;
     
     private boolean isAuthenticated = false;
     private Executor executor;
@@ -66,7 +71,7 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
     private float acceleration = 0f;
     private float currentAcceleration = 0f;
     private float lastAcceleration = 0f;
-    private static final int SHAKE_THRESHOLD = 10;
+    private static final int SHAKE_THRESHOLD = 12;
 
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
@@ -84,6 +89,7 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
         layoutOrders = findViewById(R.id.layoutOrders);
         tvNoOrders = findViewById(R.id.tvNoOrders);
         tvTitle = findViewById(R.id.tvTitle);
+        tabLayout = findViewById(R.id.tabLayout);
         
         Button btnEnable = findViewById(R.id.btnEnable);
         btnEnable.setOnClickListener(v -> showPermissionPopup());
@@ -93,7 +99,7 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
         btnExport.setVisibility(View.GONE);
         btnExport.setOnClickListener(v -> exportOrdersToCSV());
 
-        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
         networkReceiver = new NetworkReceiver(this);
@@ -106,20 +112,53 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
         }
 
         setupBiometric();
+        setupTabs();
         
-        AppDatabase.getInstance(this).orderDao().getAllOrdersLive().observe(this, orders -> {
-            if (isAuthenticated) {
-                adapter = new OrderAdapter(orders);
-                recyclerView.setAdapter(adapter);
-                tvNoOrders.setVisibility(orders.isEmpty() ? View.VISIBLE : View.GONE);
-            }
-        });
+        observeOrders(0);
 
-        AppDatabase.getInstance(this).orderDao().getOrderCountLive().observe(this, count -> {
-            if (isAuthenticated && tvTitle != null) {
-                tvTitle.setText("Live Orders (" + count + ")");
+        AppDatabase.getInstance(this).orderDao().getUnreadCountLive().observe(this, count -> {
+            if (isAuthenticated && tabLayout != null) {
+                TabLayout.Tab unreadTab = tabLayout.getTabAt(0);
+                if (unreadTab != null) {
+                    unreadTab.setText("Unread (" + count + ")");
+                }
+                tvTitle.setText(tabLayout.getSelectedTabPosition() == 0 ? "Unread Orders (" + count + ")" : "Read Orders");
             }
         });
+    }
+
+    private void setupTabs() {
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                observeOrders(tab.getPosition());
+            }
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {}
+        });
+    }
+
+    private void observeOrders(int tabIndex) {
+        AppDatabase.getInstance(this).orderDao().getUnreadOrdersLive().removeObservers(this);
+        AppDatabase.getInstance(this).orderDao().getReadOrdersLive().removeObservers(this);
+
+        if (tabIndex == 0) {
+            AppDatabase.getInstance(this).orderDao().getUnreadOrdersLive().observe(this, orders -> {
+                if (isAuthenticated) updateUI(orders);
+            });
+        } else {
+            AppDatabase.getInstance(this).orderDao().getReadOrdersLive().observe(this, orders -> {
+                if (isAuthenticated) updateUI(orders);
+            });
+        }
+    }
+
+    private void updateUI(List<OrderEntity> orders) {
+        adapter = new OrderAdapter(orders);
+        recyclerView.setAdapter(adapter);
+        tvNoOrders.setVisibility(orders.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     private void setupBiometric() {
@@ -131,7 +170,7 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
                 isAuthenticated = true;
                 layoutLanding.setVisibility(View.GONE);
                 layoutOrders.setVisibility(View.VISIBLE);
-                refreshOrders();
+                observeOrders(tabLayout.getSelectedTabPosition());
             }
 
             @Override
@@ -152,7 +191,13 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
 
     private void authenticateUser() {
         if (!isAuthenticated) {
-            biometricPrompt.authenticate(promptInfo);
+            try {
+                biometricPrompt.authenticate(promptInfo);
+            } catch (Exception e) {
+                isAuthenticated = true;
+                layoutLanding.setVisibility(View.GONE);
+                layoutOrders.setVisibility(View.VISIBLE);
+            }
         }
     }
 
@@ -166,7 +211,8 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
             lastAcceleration = currentAcceleration;
             currentAcceleration = (float) Math.sqrt((double) (x * x + y * y + z * z));
             float delta = currentAcceleration - lastAcceleration;
-            acceleration = acceleration * 0.9f + delta;
+            acceleration = acceleration * 0.9f + Math.abs(delta);
+            
             if (acceleration > SHAKE_THRESHOLD) {
                 if (btnExport.getVisibility() != View.VISIBLE) {
                     showExportButtonSeamlessly();
@@ -176,43 +222,103 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
     }
 
     private void showExportButtonSeamlessly() {
-        Animation fadeIn = new AlphaAnimation(0, 1);
-        fadeIn.setDuration(500);
-        btnExport.setVisibility(View.VISIBLE);
-        btnExport.startAnimation(fadeIn);
+        runOnUiThread(() -> {
+            Animation fadeIn = new AlphaAnimation(0, 1);
+            fadeIn.setDuration(500);
+            btnExport.setVisibility(View.VISIBLE);
+            btnExport.startAnimation(fadeIn);
+            
+            // Auto-hide after 10 seconds if not clicked
+            btnExport.postDelayed(() -> {
+                if (btnExport.getVisibility() == View.VISIBLE) {
+                    btnExport.setVisibility(View.GONE);
+                    acceleration = 0; // Reset acceleration
+                }
+            }, 10000);
+        });
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
     private void exportOrdersToCSV() {
-        List<OrderEntity> orders = AppDatabase.getInstance(this).orderDao().getAllOrders();
-        if (orders.isEmpty()) return;
-        StringBuilder csvData = new StringBuilder();
-        csvData.append("ID,Customer,Message,Phone,Date\n");
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-        for (OrderEntity o : orders) {
-            csvData.append(o.id).append(",")
-                    .append("\"").append(o.customerName).append("\",")
-                    .append("\"").append(o.message.replace("\n", " ")).append("\",")
-                    .append(o.phoneNumber != null ? o.phoneNumber : "N/A").append(",")
-                    .append(sdf.format(new Date(o.timestamp))).append("\n");
+        new Thread(() -> {
+            List<OrderEntity> orders = AppDatabase.getInstance(this).orderDao().getAllOrders();
+            if (orders.isEmpty()) {
+                runOnUiThread(() -> Toast.makeText(this, "No orders to export", Toast.LENGTH_SHORT).show());
+                return;
+            }
+            
+            StringBuilder csvData = new StringBuilder();
+            csvData.append("Customer,Item Ordered,Quantity,Phone,Location,Date\n");
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+
+            for (OrderEntity o : orders) {
+                String[] extracted = parseOrderMessage(o.message);
+                String item = extracted[0].replace("\"", "'");
+                String quantity = extracted[1];
+
+                csvData.append("\"").append(o.customerName.replace("\"", "'")).append("\",")
+                        .append("\"").append(item).append("\",")
+                        .append("\"").append(quantity).append("\",")
+                        .append(o.phoneNumber != null ? o.phoneNumber : "N/A").append(",")
+                        .append("\"").append(o.locationData != null ? o.locationData : "None").append("\",")
+                        .append(sdf.format(new Date(o.timestamp))).append("\n");
+            }
+
+            try {
+                File cachePath = new File(getCacheDir(), "exports");
+                cachePath.mkdirs();
+                File csvFile = new File(cachePath, "BizBot_Clean_Orders.csv");
+                FileOutputStream stream = new FileOutputStream(csvFile);
+                stream.write(csvData.toString().getBytes());
+                stream.close();
+
+                Uri contentUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", csvFile);
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.setType("text/csv");
+                shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                
+                runOnUiThread(() -> {
+                    startActivity(Intent.createChooser(shareIntent, "Share Orders CSV"));
+                    btnExport.setVisibility(View.GONE);
+                    acceleration = 0;
+                });
+            } catch (Exception e) {
+                Log.e("BizBot", "Export failed", e);
+                runOnUiThread(() -> Toast.makeText(this, "Export failed", Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    private String[] parseOrderMessage(String message) {
+        String item = message;
+        String quantity = "1";
+        
+        String cleanMessage = message.toLowerCase()
+                .replace("order", "")
+                .replace("price", "")
+                .replace("buy", "")
+                .replace("how much", "")
+                .replace("want", "").trim();
+
+        Pattern p = Pattern.compile("(\\d+)\\s*(.*)");
+        Matcher m = p.matcher(cleanMessage);
+        if (m.find()) {
+            quantity = m.group(1);
+            item = m.group(2).trim();
+        } else {
+            p = Pattern.compile("(.*?)\\s*(\\d+)$");
+            m = p.matcher(cleanMessage);
+            if (m.find()) {
+                item = m.group(1).trim();
+                quantity = m.group(2);
+            }
         }
-        try {
-            File cachePath = new File(getCacheDir(), "exports");
-            cachePath.mkdirs();
-            File csvFile = new File(cachePath, "BizBot_Orders.csv");
-            FileOutputStream stream = new FileOutputStream(csvFile);
-            stream.write(csvData.toString().getBytes());
-            stream.close();
-            Uri contentUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", csvFile);
-            Intent shareIntent = new Intent(Intent.ACTION_SEND);
-            shareIntent.setType("text/csv");
-            shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
-            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(shareIntent, "Share Orders CSV"));
-            btnExport.setVisibility(View.GONE);
-        } catch (Exception ignored) {}
+        
+        if (item.isEmpty()) item = "Miscellaneous";
+        return new String[]{item, quantity};
     }
 
     private void showPermissionPopup() {
@@ -224,16 +330,27 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
         }
         boolean notificationEnabled = isNotificationServiceEnabled();
         boolean accessibilityEnabled = isAccessibilityServiceEnabled();
+
         if (!notificationEnabled || !accessibilityEnabled) {
+            String helpText = "";
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                helpText = "\n\nNote: If you see 'Restricted Setting', go to Phone Settings > Apps > BizBot > tap ':' at top right > 'Allow restricted settings'.";
+            }
+
             new MaterialAlertDialogBuilder(this)
-                .setTitle("Allow BizBot?")
-                .setMessage("Permissions required to capture and send orders.")
-                .setPositiveButton("Allow", (dialog, which) -> {
+                .setTitle("Setup Required")
+                .setMessage("BizBot needs permissions to capture orders and automate replies." + helpText)
+                .setPositiveButton("Configure", (dialog, which) -> {
                     if (!notificationEnabled) {
                         startActivity(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
                     } else {
                         openAccessibilitySettings();
                     }
+                })
+                .setNeutralButton("Troubleshoot", (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
                 })
                 .setNegativeButton("Deny", null)
                 .show();
@@ -266,14 +383,6 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
         });
     }
 
-    private void refreshOrders() {
-        List<OrderEntity> orders = AppDatabase.getInstance(this).orderDao().getAllOrders();
-        adapter = new OrderAdapter(orders);
-        RecyclerView rv = findViewById(R.id.recyclerView);
-        if (rv != null) rv.setAdapter(adapter);
-        tvNoOrders.setVisibility(orders.isEmpty() ? View.VISIBLE : View.GONE);
-    }
-
     private void checkServiceStatus() {
         boolean postNotificationGranted = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -284,7 +393,7 @@ public class MainActivity extends BaseActivity implements NetworkReceiver.Networ
 
         if (notificationEnabled && accessibilityEnabled && postNotificationGranted) {
             if (!isAuthenticated) {
-                layoutLanding.setVisibility(View.VISIBLE); // Keep landing visible until auth
+                layoutLanding.setVisibility(View.VISIBLE);
                 authenticateUser();
             } else {
                 layoutLanding.setVisibility(View.GONE);
